@@ -1,5 +1,6 @@
 use proconio::input;
 use std::fmt;
+use rand::seq::SliceRandom;
 
 struct Input {
     w: usize,
@@ -163,20 +164,29 @@ impl Room {
         let dir = ['L', 'R', 'T', 'B'];
         let mut candidates = Vec::new();
         // 移動
-        for d in dir {
-            let room = self.shift(d);
-            candidates.push((room.cost(), room));
-        }
+        let d = dir.choose(&mut rand::thread_rng()).unwrap();
+        let room = self.shift(*d);
+        candidates.push((room.cost(), room));
+        //for d in dir {
+        //    let room = self.shift(d);
+        //    candidates.push((room.cost(), room));
+        //}
         // 拡張
-        for d in dir {
-            let room = self.expand(d);
-            candidates.push((room.cost(), room));
-        }
+        let d = dir.choose(&mut rand::thread_rng()).unwrap();
+        let room = self.expand(*d);
+        candidates.push((room.cost(), room));
+        //for d in dir {
+        //    let room = self.expand(d);
+        //    candidates.push((room.cost(), room));
+        //}
         // 縮小
-        for d in dir {
-            let room = self.shrink(d);
-            candidates.push((room.cost(), room));
-        }
+        let d = dir.choose(&mut rand::thread_rng()).unwrap();
+        let room = self.shrink(*d);
+        candidates.push((room.cost(), room));
+        //for d in dir {
+        //    let room = self.shrink(d);
+        //    candidates.push((room.cost(), room));
+        //}
         candidates.push((self.cost(), self.clone()));
         
         // コストの昇順
@@ -326,7 +336,7 @@ impl Solver {
 
         // 最適化
         for ar in &mut self.solution.arrangements[..self.d] {
-            for _ in 0..1000 {
+            for _ in 0..3000 {
                 ar.optimize();
                 // println!("{}", ar);
             }
@@ -339,8 +349,9 @@ impl Solver {
         for ar in self.solution.arrangements.iter() {
             for room in ar.rooms.iter() {
                 println!("{} {} {} {}", room.top_left.0, room.top_left.1, room.bottom_right.0, room.bottom_right.1);
+            }
         }
-        }
+    eprintln!("error");
     }
 }
 
