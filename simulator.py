@@ -28,7 +28,7 @@ def main(i):
 
 if __name__ == '__main__':
     start = time.time()
-    trial = 100
+    trial = 200
     result = []
     '''
     for i in tqdm(range(trial)):
@@ -47,4 +47,6 @@ if __name__ == '__main__':
     print()
     df = pd.DataFrame(result, columns=['i', 'd', 'n', 'e', 'cost', 'time'])
     df.to_csv('result.csv', index=False)
+    cost = np.mean(df['cost']) * 50
+    print(f'cost:', format(int(df['cost'].sum()*50/trial), ','))
     print(f'end elapsed time: {time.time()-start:.2f}s')
