@@ -366,6 +366,57 @@ impl Arrangement {
         }
         adjacent
     }
+
+    fn stack(&mut self, i: usize, j: usize, w: usize, a: Vec<usize>) {
+        let mut max_h = 0;
+        let mut data: Vec::<(usize, usize, i64, usize)> = Vec::with_capacity(a.len());  // (h: 高さ, a: 予約の面積, b: 不足面積, k: 予約の面積のインデックス)
+        for (k, ai) in a.iter().enumerate() {
+            let mut h = ai/w;
+            if h == 0 {
+                h = 1;
+            }
+            let b = *ai as i64 - (w * h) as i64;
+            data.push((h, *ai, b, k));
+            max_h += h;
+        }
+
+        // 不足分を調整
+        data.sort_by_key(|&(_, _, b, _)| std::cmp::Reverse(b));  // 不足分が大きい方から処理
+        let mut temp_data: Vec<(usize, usize, i64, usize)> = Vec::with_capacity(data.len());
+        let hh = (self.w - max_h - 1) / data.len() + 1;
+        for (h, a, b, k) in &data {
+            if max_h >= self.w {
+                temp_data.push((*h, *a, *b, *k));
+                continue;
+            }
+            let mut h = h + hh;
+            max_h += hh;
+            if max_h > self.w {
+                h -= max_h - self.w;
+            }
+            temp_data.push((h, *a, *a as i64 -(self.w*h) as i64, *k));
+        }
+
+        data.copy_from_slice(&temp_data[..(temp_data.len())]);
+
+
+        // Roomに変換
+        let mut ii = i;
+        let jj = j;
+        let mut rooms: Vec::<(Room, usize)> = Vec::with_capacity(a.len());  // (Room, k: 予約の面積のインデックス)
+        for (h, a, _, k) in data {
+            // eprintln!("top_left: ({}, {}), bottom_right: ({}, {})", ii, jj, ii+h, jj+w);
+            let room = Room::new((ii, jj), (ii+h, jj+w), self.w, a);
+            // eprintln!("room: {}", room);
+            rooms.push((room, k));
+            ii += h;
+        }
+
+        rooms.sort_by_key(|&(_, k)| k);
+        for (room, _) in rooms {
+            self.rooms.push(room);
+        }
+    }
 }
 
 impl fmt::Display for Arrangement {
@@ -446,17 +497,19 @@ impl Solver {
         for d in 0..self.d {
             // 初期化
             let mut ar = Arrangement::new(self.w, self.n);
-            ar.init(self.a[d].clone());
+            // ar.init(self.a[d].clone());
+            ar.stack(0, 0, self.w, self.a[d].clone());
             self.solution.arrangements.push(ar);
         }
 
         // 最適化
+        /*
         for ar in &mut self.solution.arrangements[..self.d] {
             for _ in 0..3000 {
                 ar.optimize();
                 // println!("{}", ar);
             }
-        }
+        }*/
 
         // 日付間の配置調整
     }
