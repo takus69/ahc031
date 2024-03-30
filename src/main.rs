@@ -367,7 +367,7 @@ impl Arrangement {
         adjacent
     }
 
-    fn stack(&self, i: usize, j: usize, w: usize, a: &Vec<(usize, usize)>) -> Vec<(Room, usize)> {
+    fn stack(&self, i: usize, j: usize, w: usize, a: &Vec<(usize, usize)>) -> Vec<(usize, usize, i64, usize)> {
         // eprintln!("stack (i, j): ({}, {}), w: {}, len a: {}, a: {:?}", i, j, w, a.len(), a);
         let mut max_h = 0;
         let mut data: Vec::<(usize, usize, i64, usize)> = Vec::with_capacity(a.len());  // (h: 高さ, a: 予約の面積, b: 不足面積, k: 予約の面積のインデックス)
@@ -408,11 +408,14 @@ impl Arrangement {
 
         data.copy_from_slice(&temp_data[..(temp_data.len())]);
 
+        data
+    }
 
+    fn conv_rooms(&self, i: usize, j: usize, w: usize, data: Vec<(usize, usize, i64, usize)>) -> Vec<(Room, usize)> {
         // Roomに変換
         let mut ii = i;
         let jj = j;
-        let mut rooms: Vec::<(Room, usize)> = Vec::with_capacity(a.len());  // (Room, k: 予約の面積のインデックス)
+        let mut rooms: Vec::<(Room, usize)> = Vec::with_capacity(data.len());  // (Room, k: 予約の面積のインデックス)
         for (h, a, _, k) in data {
             // eprintln!("top_left: ({}, {}), bottom_right: ({}, {})", ii, jj, ii+h, jj+w);
             let room = Room::new((ii, jj), (ii+h, jj+w), self.w, a);
@@ -507,7 +510,8 @@ impl Solver {
             let a: Vec<(usize, usize)> = self.a[d].iter().enumerate().map(|(i, &x)| (i, x)).collect();
 
             // 一列に配置
-            let mut rooms = ar.stack(0, 0, self.w, &a);
+            let data = ar.stack(0, 0, self.w, &a);
+            let mut rooms = ar.conv_rooms(0, 0, self.w, data);
             rooms.sort_by_key(|&(_, k)| k);
             for (room, _) in rooms {
                 ar.rooms.push(room);
@@ -518,24 +522,32 @@ impl Solver {
             // 二列に配置。何個か一列目から除外して、二列目に配置
             for i in 1..(self.n) {
                 let sum_a: usize = a.iter().map(|(_, x)| x).take(i).sum();
-                let w2 = sum_a / self.w + 1;
-                if w2 > self.w / 2 { break; }
-                let rooms1 = ar.stack(0, 0, self.w-w2, &a[i..].to_vec());  // 一列目
-                let rooms2 = ar.stack(0, self.w-w2, w2, &a[..i].to_vec());  // 二列目
-                for (room, k) in rooms1 {
-                    ar.rooms[k] = room;
-                }
-                for (room, k) in rooms2 {
-                    ar.rooms[k] = room;
-                }
-                if ar.cost() < min_cost {
-                    min_cost = ar.cost();
-                    optimal_ar = ar.clone();
+                for j in 1..3 {
+                    let w2 = sum_a / self.w + j;
+                    if w2 > self.w / 2 { break; }
+                    // 一列目
+                    let data1 = ar.stack(0, 0, self.w-w2, &a[i..].to_vec());
+                    let rooms1 = ar.conv_rooms(0, 0, self.w-w2, data1);
+                    // 二列目
+                    let data2 = ar.stack(0, self.w-w2, w2, &a[..i].to_vec());
+                    let rooms2 = ar.conv_rooms(0, self.w-w2, w2, data2);
+                    for (room, k) in rooms1 {
+                        ar.rooms[k] = room;
+                    }
+                    for (room, k) in rooms2 {
+                        ar.rooms[k] = room;
+                    }
+                    if ar.cost() < min_cost {
+                        min_cost = ar.cost();
+                        optimal_ar = ar.clone();
+                    }
                 }
             }
 
             self.solution.arrangements.push(optimal_ar);
         }
+
+        // 最適化
 
         // 最適化
         /*
