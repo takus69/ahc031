@@ -392,7 +392,7 @@ impl Arrangement {
         data.sort_by_key(|&(_, _, b, _)| std::cmp::Reverse(b));  // 不足分が大きい方から処理
         let mut temp_data: Vec<(usize, usize, i64, usize)> = Vec::with_capacity(data.len());
         // eprintln!("{} {}", self.w, max_h);
-        let hh = (self.w - max_h - 1) / data.len() + 1;
+        let hh = 1; //(self.w - max_h - 1) / data.len() + 1;
         for (h, a, b, k) in &data {
             if max_h >= self.w {
                 temp_data.push((*h, *a, *b, *k));
