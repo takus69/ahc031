@@ -555,7 +555,13 @@ impl Solver {
                 println!("{} {} {} {}", room.top_left.0, room.top_left.1, room.bottom_right.0, room.bottom_right.1);
             }
         }
-    eprintln!("cost: {}", self.solution.cost());
+    }
+
+    fn result(&self) {
+        let sums: Vec<usize> = self.a.iter().map(|row| row.iter().sum()).collect();
+        let average: f64 = sums.iter().sum::<usize>() as f64 / sums.len() as f64;
+        let e = (1.0 - average / (self.w * self.w) as f64).sqrt();
+        eprintln!("{{ \"d\": {}, \"n\": {}, \"e\": {}, \"cost\": {} }}", self.d, self.n, e, self.solution.cost());
     }
 }
 
@@ -564,4 +570,5 @@ fn main() {
     let mut solver = Solver::new(input);
     solver.solve();
     solver.ans();
+    solver.result();
 }
