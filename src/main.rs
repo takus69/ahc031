@@ -262,7 +262,7 @@ impl fmt::Display for Room {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Arrangement {
     w: usize,
     n: usize,
@@ -367,22 +367,31 @@ impl Arrangement {
         adjacent
     }
 
-    fn stack(&mut self, i: usize, j: usize, w: usize, a: Vec<usize>) {
+    fn stack(&self, i: usize, j: usize, w: usize, a: &Vec<(usize, usize)>) -> Vec<(Room, usize)> {
+        // eprintln!("stack (i, j): ({}, {}), w: {}, len a: {}, a: {:?}", i, j, w, a.len(), a);
         let mut max_h = 0;
         let mut data: Vec::<(usize, usize, i64, usize)> = Vec::with_capacity(a.len());  // (h: 高さ, a: 予約の面積, b: 不足面積, k: 予約の面積のインデックス)
-        for (k, ai) in a.iter().enumerate() {
+        for (k, ai) in a {
             let mut h = ai/w;
             if h == 0 {
                 h = 1;
             }
             let b = *ai as i64 - (w * h) as i64;
-            data.push((h, *ai, b, k));
+            if max_h + h > self.w - a.len() {
+                if self.w > a.len() + max_h {
+                    h = self.w - a.len() - max_h;
+                } else {
+                    h = 1;
+                }
+            }
+            data.push((h, *ai, b, *k));
             max_h += h;
         }
 
         // 不足分を調整
         data.sort_by_key(|&(_, _, b, _)| std::cmp::Reverse(b));  // 不足分が大きい方から処理
         let mut temp_data: Vec<(usize, usize, i64, usize)> = Vec::with_capacity(data.len());
+        // eprintln!("{} {}", self.w, max_h);
         let hh = (self.w - max_h - 1) / data.len() + 1;
         for (h, a, b, k) in &data {
             if max_h >= self.w {
@@ -412,10 +421,7 @@ impl Arrangement {
             ii += h;
         }
 
-        rooms.sort_by_key(|&(_, k)| k);
-        for (room, _) in rooms {
-            self.rooms.push(room);
-        }
+        rooms
     }
 }
 
@@ -495,11 +501,40 @@ impl Solver {
     fn solve(&mut self) {
         // 初期配置の決定
         for d in 0..self.d {
-            // 初期化
+            // 初期配置
             let mut ar = Arrangement::new(self.w, self.n);
             // ar.init(self.a[d].clone());
-            ar.stack(0, 0, self.w, self.a[d].clone());
-            self.solution.arrangements.push(ar);
+            let a: Vec<(usize, usize)> = self.a[d].iter().enumerate().map(|(i, &x)| (i, x)).collect();
+
+            // 一列に配置
+            let mut rooms = ar.stack(0, 0, self.w, &a);
+            rooms.sort_by_key(|&(_, k)| k);
+            for (room, _) in rooms {
+                ar.rooms.push(room);
+            }
+            let mut min_cost = ar.cost();
+            let mut optimal_ar = ar.clone();
+
+            // 二列に配置。何個か一列目から除外して、二列目に配置
+            for i in 1..(self.n) {
+                let sum_a: usize = a.iter().map(|(_, x)| x).take(i).sum();
+                let w2 = sum_a / self.w + 1;
+                if w2 > self.w / 2 { break; }
+                let rooms1 = ar.stack(0, 0, self.w-w2, &a[i..].to_vec());  // 一列目
+                let rooms2 = ar.stack(0, self.w-w2, w2, &a[..i].to_vec());  // 二列目
+                for (room, k) in rooms1 {
+                    ar.rooms[k] = room;
+                }
+                for (room, k) in rooms2 {
+                    ar.rooms[k] = room;
+                }
+                if ar.cost() < min_cost {
+                    min_cost = ar.cost();
+                    optimal_ar = ar.clone();
+                }
+            }
+
+            self.solution.arrangements.push(optimal_ar);
         }
 
         // 最適化
