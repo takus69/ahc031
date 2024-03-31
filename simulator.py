@@ -20,7 +20,8 @@ def main(i):
     n = r['n']
     e = r['e']
     cost = r['cost']
-    data = [i, d, n, round(e, 4), cost, t]
+    cost2 = r['cost'] / ((d-1)*(n-2))
+    data = [i, d, n, round(e, 4), cost, cost2, t]
     print('\r', 'end', i, end='')
     # print(i, 'end')
     return data
@@ -46,8 +47,9 @@ if __name__ == '__main__':
         data = [pool.apply_async(main, (i,)) for i in range(trial)]
         result = [d.get() for d in data]
     print()
-    df = pd.DataFrame(result, columns=['i', 'd', 'n', 'e', 'cost', 'time'])
-    df.to_csv('result.csv', index=False)
+    df = pd.DataFrame(result, columns=['i', 'd', 'n', 'e', 'cost', 'cost2', 'time'])
     cost = np.mean(df['cost']) * 50
-    print(f'cost:', format(int(df['cost'].sum()*50/trial), ','))
+    cost2 = np.mean(df['cost2']) * 50
+    print(f'cost:', format(int(df['cost'].sum()*50/trial), ','), 'cost2:', format(int(df['cost2'].mean()), ','))
+    df.to_csv('result.csv', index=False)
     print(f'end elapsed time: {time.time()-start:.2f}s')

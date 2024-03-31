@@ -473,6 +473,10 @@ impl Solution {
         cost
     }
 
+    fn optimize(&self, data1: Vec<(usize, usize, i64, usize, usize)>, data2: Vec<(usize, usize, i64, usize, usize)>) -> (Vec<(usize, usize, i64, usize, usize)>, Vec<(usize, usize, i64, usize, usize)>) {
+        (data1, data2)
+    }
+
 }
 
 impl fmt::Display for Solution {
@@ -501,6 +505,19 @@ impl Solver {
             a: input.a,
             solution: Solution::new(input.d),
         }
+    }
+
+    fn recon(&self, data1: Vec<(usize, usize, i64, usize, usize)>, data2: Vec<(usize, usize, i64, usize, usize)>, w2: usize, d: usize) -> Arrangement {
+        let mut ar = self.solution.arrangements[d].clone();
+        let rooms1 = ar.conv_rooms(0, 0, self.w-w2, &data1);
+        let rooms2 = ar.conv_rooms(0, self.w-w2, w2, &data2);
+        for (room, k) in rooms1 {
+            ar.rooms[k] = room;
+        }
+        for (room, k) in rooms2 {
+            ar.rooms[k] = room;
+        }
+        ar
     }
 
     fn solve(&mut self) {
@@ -558,68 +575,63 @@ impl Solver {
             self.solution.arrangements.push(optimal_ar);
         }
 
-        // 最適化
-        /*
-        let mut trial_sol = self.solution.clone();
-        let mut optimal_cost = trial_sol.cost();
-        let trial = 0;
-        let mut pre_ar;
-        let mut now_ar;
-        let mut post_ar;
-        let mut rng = StdRng::seed_from_u64(0);
+        // 最適化(日付完の配置を調整)
+        let mut optimal_cost = self.solution.cost();
         for d in 0..self.d {
-            now_ar = self.solution.arrangements[d].clone();
-            if d < self.d-1 {
-                post_ar = self.solution.arrangements[d+1].clone();
-            }
+            let mut ar = self.solution.arrangements[d].clone();
             let mut data1 = optimal_data1[d].clone();
-            // let mut data2 = optimal_data2[d].clone();
+            let mut data2 = optimal_data2[d].clone();
+            data1.sort_by_key(|&(h, _, _, _, _)| h);
+            data2.sort_by_key(|&(h, _, _, _, _)| h);
+
+            // 部屋をフルに使う
+            let mut max_h = 0;
+            for (h, _, _, _, _,) in &data1 {
+                max_h += h;
+            }
+            let n = data1.len();
+            data1[n-1].0 += self.w - max_h;
+            for (h, _, _, _, _,) in &data2 {
+                max_h += h;
+            }
+            let mut max_h = 0;
+            for (h, _, _, _, _,) in &data2 {
+                max_h += h;
+            }
+            let n = data2.len();
+            data2[n-1].0 += self.w - max_h;
+
+            // 部屋の再構築
             let w2 = optimal_param[d];
-            for _ in 0..trial {
-                // 対象を選択する
-                if data1.len() == 1 {
-                    break;
-                }
-                let i = rng.gen_range(0..(data1.len()-1));
-                // 行動を選択する
-                let r = rng.gen_range(0..1);
-                if r == 0 {
-                    data1[i].0 += 1;
-                    data1[i+1].0 -= 1;
-                }
-                // } else if r == 1 {
-                //    data1[i].0 -= 1;
-                // }
-
-                // Roomに変換
-                let rooms1 = now_ar.conv_rooms(0, 0, self.w-w2, &data1);
-                // let rooms2 = now_ar.conv_rooms(0, self.w-w2, w2, &data2);
-                for (room, k) in rooms1 {
-                    now_ar.rooms[k] = room;
-                }
-                trial_sol.arrangements[d] = now_ar.clone();
-                let cost = trial_sol.cost();
-                if cost < optimal_cost {
-                    optimal_cost = cost;
-                } else {
-                    trial_sol.arrangements[d] = self.solution.arrangements[d].clone();
-                }
-            }
-            pre_ar = now_ar;
+            let ar = self.recon(data1, data2, w2, d);
+            self.solution.arrangements[d] = ar;
         }
-        self.solution = trial_sol.clone();
-        */
 
-        // 最適化
+        // 同じ高さの部屋があれば上に詰めていく
         /*
-        for ar in &mut self.solution.arrangements[..self.d] {
-            for _ in 0..3000 {
-                ar.optimize();
-                // println!("{}", ar);
+        let mut ar = Arrangement::new(self.w, self.n);
+        for d in (1..self.d).rev().step_by(2) {
+            let mut data1_1 = optimal_data1[d].clone();
+            let mut data2_1 = optimal_data2[d].clone();
+            let mut data1_2 = optimal_data1[d-1].clone();
+            let mut data2_2 = optimal_data2[d-1].clone();
+            let (optimal_data1_1, optimal_data1_2) = self.solution.optimize(data1_1, data1_2);
+            let (optimal_data2_1, optimal_data2_2) = self.solution.optimize(data2_1, data2_2);
+        
+            // 部屋の再構築
+            let w2_1 = optimal_param[d];
+            let w2_2 = optimal_param[d-1];
+            let rooms1 = ar.conv_rooms(0, 0, self.w-w2, &data1);
+            let rooms2 = ar.conv_rooms(0, self.w-w2, w2, &data2);
+            for (room, k) in rooms1 {
+                ar.rooms[k] = room;
             }
-        }*/
-
-        // 日付間の配置調整
+            for (room, k) in rooms2 {
+                ar.rooms[k] = room;
+            }
+            self.solution.arrangements[d] = ar;
+        }
+        */
     }
 
     fn ans(&self) {
