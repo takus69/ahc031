@@ -1,6 +1,7 @@
 use proconio::input;
 use std::fmt;
 use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 struct Input {
     w: usize,
@@ -367,10 +368,10 @@ impl Arrangement {
         adjacent
     }
 
-    fn stack(&self, i: usize, j: usize, w: usize, a: &Vec<(usize, usize)>) -> Vec<(usize, usize, i64, usize)> {
+    fn stack(&self, i: usize, j: usize, w: usize, a: &Vec<(usize, usize)>) -> Vec<(usize, usize, i64, usize, usize)> {
         // eprintln!("stack (i, j): ({}, {}), w: {}, len a: {}, a: {:?}", i, j, w, a.len(), a);
         let mut max_h = 0;
-        let mut data: Vec::<(usize, usize, i64, usize)> = Vec::with_capacity(a.len());  // (h: 高さ, a: 予約の面積, b: 不足面積, k: 予約の面積のインデックス)
+        let mut data: Vec::<(usize, usize, i64, usize, usize)> = Vec::with_capacity(a.len());  // (h: 高さ, a: 予約の面積, b: 不足面積, k: 予約の面積のインデックス)
         for (k, ai) in a {
             let mut h = ai/w;
             if h == 0 {
@@ -384,18 +385,19 @@ impl Arrangement {
                     h = 1;
                 }
             }
-            data.push((h, *ai, b, *k));
+            data.push((h, *ai, b, *k, h));
             max_h += h;
         }
 
         // 不足分を調整
-        data.sort_by_key(|&(_, _, b, _)| std::cmp::Reverse(b));  // 不足分が大きい方から処理
-        let mut temp_data: Vec<(usize, usize, i64, usize)> = Vec::with_capacity(data.len());
+        data.sort_by_key(|&(_, _, b, _, _)| std::cmp::Reverse(b));  // 不足分が大きい方から処理
+        let mut temp_data: Vec<(usize, usize, i64, usize, usize)> = Vec::with_capacity(data.len());
         // eprintln!("{} {}", self.w, max_h);
-        let hh = 1; //(self.w - max_h - 1) / data.len() + 1;
-        for (h, a, b, k) in &data {
+        let hh = 1;
+        // let hh = (self.w - max_h - 1) / data.len() + 1;
+        for (h, a, b, k, min_h) in &data {
             if max_h >= self.w {
-                temp_data.push((*h, *a, *b, *k));
+                temp_data.push((*h, *a, *b, *k, *min_h));
                 continue;
             }
             let mut h = h + hh;
@@ -403,7 +405,7 @@ impl Arrangement {
             if max_h > self.w {
                 h -= max_h - self.w;
             }
-            temp_data.push((h, *a, *a as i64 -(self.w*h) as i64, *k));
+            temp_data.push((h, *a, *a as i64 -(self.w*h) as i64, *k, *min_h));
         }
 
         data.copy_from_slice(&temp_data[..(temp_data.len())]);
@@ -411,16 +413,16 @@ impl Arrangement {
         data
     }
 
-    fn conv_rooms(&self, i: usize, j: usize, w: usize, data: Vec<(usize, usize, i64, usize)>) -> Vec<(Room, usize)> {
+    fn conv_rooms(&self, i: usize, j: usize, w: usize, data: &Vec<(usize, usize, i64, usize, usize)>) -> Vec<(Room, usize)> {
         // Roomに変換
         let mut ii = i;
         let jj = j;
         let mut rooms: Vec::<(Room, usize)> = Vec::with_capacity(data.len());  // (Room, k: 予約の面積のインデックス)
-        for (h, a, _, k) in data {
+        for (h, a, _, k, min_h) in data {
             // eprintln!("top_left: ({}, {}), bottom_right: ({}, {})", ii, jj, ii+h, jj+w);
-            let room = Room::new((ii, jj), (ii+h, jj+w), self.w, a);
+            let room = Room::new((ii, jj), (ii+h, jj+w), self.w, *a);
             // eprintln!("room: {}", room);
-            rooms.push((room, k));
+            rooms.push((room, *k));
             ii += h;
         }
 
@@ -437,7 +439,7 @@ impl fmt::Display for Arrangement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Solution {
     d: usize,
     arrangements: Vec<Arrangement>,
@@ -503,6 +505,9 @@ impl Solver {
 
     fn solve(&mut self) {
         // 初期配置の決定
+        let mut optimal_data1: Vec<Vec<(usize, usize, i64, usize, usize)>> = Vec::with_capacity(self.d);
+        let mut optimal_data2: Vec<Vec<(usize, usize, i64, usize, usize)>> = Vec::with_capacity(self.d);
+        let mut optimal_param: Vec<usize> = Vec::with_capacity(self.d);
         for d in 0..self.d {
             // 初期配置
             let mut ar = Arrangement::new(self.w, self.n);
@@ -511,26 +516,29 @@ impl Solver {
 
             // 一列に配置
             let data = ar.stack(0, 0, self.w, &a);
-            let mut rooms = ar.conv_rooms(0, 0, self.w, data);
+            let mut rooms = ar.conv_rooms(0, 0, self.w, &data);
             rooms.sort_by_key(|&(_, k)| k);
             for (room, _) in rooms {
                 ar.rooms.push(room);
             }
             let mut min_cost = ar.cost();
             let mut optimal_ar = ar.clone();
+            optimal_data1.push(data.to_vec());
+            optimal_data2.push(data.to_vec());
+            optimal_param.push(0);
 
             // 二列に配置。何個か一列目から除外して、二列目に配置
             for i in 1..(self.n) {
                 let sum_a: usize = a.iter().map(|(_, x)| x).take(i).sum();
-                for j in 1..3 {
+                for j in 1..5 {
                     let w2 = sum_a / self.w + j;
                     if w2 > self.w / 2 { break; }
                     // 一列目
                     let data1 = ar.stack(0, 0, self.w-w2, &a[i..].to_vec());
-                    let rooms1 = ar.conv_rooms(0, 0, self.w-w2, data1);
+                    let rooms1 = ar.conv_rooms(0, 0, self.w-w2, &data1);
                     // 二列目
                     let data2 = ar.stack(0, self.w-w2, w2, &a[..i].to_vec());
-                    let rooms2 = ar.conv_rooms(0, self.w-w2, w2, data2);
+                    let rooms2 = ar.conv_rooms(0, self.w-w2, w2, &data2);
                     for (room, k) in rooms1 {
                         ar.rooms[k] = room;
                     }
@@ -540,6 +548,9 @@ impl Solver {
                     if ar.cost() < min_cost {
                         min_cost = ar.cost();
                         optimal_ar = ar.clone();
+                        optimal_data1[d] = data1.to_vec();
+                        optimal_data2[d] = data2.to_vec();
+                        optimal_param[d] = w2;
                     }
                 }
             }
@@ -548,6 +559,56 @@ impl Solver {
         }
 
         // 最適化
+        /*
+        let mut trial_sol = self.solution.clone();
+        let mut optimal_cost = trial_sol.cost();
+        let trial = 0;
+        let mut pre_ar;
+        let mut now_ar;
+        let mut post_ar;
+        let mut rng = StdRng::seed_from_u64(0);
+        for d in 0..self.d {
+            now_ar = self.solution.arrangements[d].clone();
+            if d < self.d-1 {
+                post_ar = self.solution.arrangements[d+1].clone();
+            }
+            let mut data1 = optimal_data1[d].clone();
+            // let mut data2 = optimal_data2[d].clone();
+            let w2 = optimal_param[d];
+            for _ in 0..trial {
+                // 対象を選択する
+                if data1.len() == 1 {
+                    break;
+                }
+                let i = rng.gen_range(0..(data1.len()-1));
+                // 行動を選択する
+                let r = rng.gen_range(0..1);
+                if r == 0 {
+                    data1[i].0 += 1;
+                    data1[i+1].0 -= 1;
+                }
+                // } else if r == 1 {
+                //    data1[i].0 -= 1;
+                // }
+
+                // Roomに変換
+                let rooms1 = now_ar.conv_rooms(0, 0, self.w-w2, &data1);
+                // let rooms2 = now_ar.conv_rooms(0, self.w-w2, w2, &data2);
+                for (room, k) in rooms1 {
+                    now_ar.rooms[k] = room;
+                }
+                trial_sol.arrangements[d] = now_ar.clone();
+                let cost = trial_sol.cost();
+                if cost < optimal_cost {
+                    optimal_cost = cost;
+                } else {
+                    trial_sol.arrangements[d] = self.solution.arrangements[d].clone();
+                }
+            }
+            pre_ar = now_ar;
+        }
+        self.solution = trial_sol.clone();
+        */
 
         // 最適化
         /*

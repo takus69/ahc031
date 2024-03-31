@@ -36,8 +36,9 @@ if __name__ == '__main__':
         t = round(time.time()-start, 4)
         d = r['d']
         n = r['n']
+        e = r['e']
         cost = r['cost']
-        data = [i, d, n, cost, t]
+        data = [i, d, n, round(e, 4), cost, t]
         result.append(data)
     '''
     processes = multiprocessing.cpu_count()
