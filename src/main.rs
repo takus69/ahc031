@@ -2,6 +2,7 @@ use proconio::input;
 use std::fmt;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::collections::HashSet;
 
 struct Input {
     w: usize,
@@ -465,7 +466,7 @@ impl Solution {
             cost += pre_ar.partition_cost();
             // eprintln!("d: {}, partition cost: {}", d, pre_ar.partition_cost());
             // 共通部分はコスト減(撤去と設置分)
-            cost -= pre_ar.overlap(ar) * 2;
+            //cost -= pre_ar.overlap(ar) * 2;
             // eprintln!("d: {}, pre_ar overlap: {}", d, pre_ar.overlap(ar));
             pre_ar = ar;
             // eprintln!("d: {}, cost: {} {}", d, cost, ar.cost());
@@ -474,7 +475,73 @@ impl Solution {
     }
 
     fn optimize(&self, data1: Vec<(usize, usize, i64, usize, usize)>, data2: Vec<(usize, usize, i64, usize, usize)>) -> (Vec<(usize, usize, i64, usize, usize)>, Vec<(usize, usize, i64, usize, usize)>) {
-        (data1, data2)
+        let mut max_h1 = 0;
+        let mut max_h2 = 0;
+        let mut candidates: Vec<(i64, usize, usize)> = Vec::new();
+        let mut h_set: HashSet<i64> = HashSet::new();
+        for (i, (h1, b1, c1, k1, min_h1)) in data1.iter().enumerate() {
+            max_h1 += h1;
+            for (j, (h2, b2, c2, k2, min_h2)) in data2.iter().enumerate() {
+                if i == 0 {
+                    max_h2 += h2;
+                }
+                let h: i64 = *h1 as i64 - *h2 as i64;
+                candidates.push((h, i, j));
+                h_set.insert(h.abs());
+            }
+        }
+        let mut h_set2: Vec<i64> = Vec::new();
+        for h in h_set {
+            h_set2.push(h);
+        }
+        h_set2.sort_by_key(|&h| h);
+        // eprintln!("{:?}", h_set2);
+
+        let mut optimal_data1: Vec<(usize, usize, i64, usize, usize)> = Vec::new();
+        let mut optimal_data2: Vec<(usize, usize, i64, usize, usize)> = Vec::new();
+        let mut flag1 = vec![false; data1.len()];
+        let mut flag2 = vec![false; data2.len()];
+        let w: usize = 1000;
+        for hhh in h_set2 {
+            let hh: usize = hhh as usize;
+            if max_h1 + hh > w && max_h2 + hh > w {
+                break;
+            }
+            for (h, i, j) in &candidates {
+                if h.abs() as usize == hh && !flag1[*i] && !flag2[*j] {
+                    let (h1, b1, c1, k1, min_h1) = data1[*i];
+                    let (h2, b2, c2, k2, min_h2) = data2[*j];
+                    if *h > 0 {
+                        if max_h1 + hh > w {
+                            break;
+                        }
+                        optimal_data1.push((h1+hh, b1, c1, k1, min_h1));
+                        optimal_data2.push((h2, b2, c2, k2, min_h2));
+                        max_h1 += hh;
+                    } else {
+                        if max_h2 + hh > w {
+                            break;
+                        }
+                        optimal_data1.push((h1, b1, c1, k1, min_h1));
+                        optimal_data2.push((h2+hh, b2, c2, k2, min_h2));
+                        max_h2 += hh;
+                    }
+                    flag1[*i] = true;
+                    flag2[*j] = true;
+                }
+            }
+        }
+        for i in 0..(data1.len()) {
+            if !flag1[i] {
+                optimal_data1.push(data1[i].clone());
+            }
+        }
+        for i in 0..(data2.len()) {
+            if !flag2[i] {
+                optimal_data2.push(data2[i].clone());
+            }
+        }
+        (optimal_data1, optimal_data2)
     }
 
 }
@@ -575,14 +642,36 @@ impl Solver {
             self.solution.arrangements.push(optimal_ar);
         }
 
-        // 最適化(日付完の配置を調整)
+        // 同じ高さの部屋があれば上に詰めていく
+        let mut ar = Arrangement::new(self.w, self.n);
+        for d in (1..self.d).rev().step_by(2) {
+            let data1_1 = optimal_data1[d].clone();
+            let data1_2 = optimal_data1[d-1].clone();
+            let (optimal_data1_1, optimal_data1_2) = self.solution.optimize(data1_1, data1_2);
+            let data2_1 = optimal_data2[d].clone();
+            let data2_2 = optimal_data2[d-1].clone();
+            let (optimal_data2_1, optimal_data2_2) = self.solution.optimize(data2_1, data2_2);
+            optimal_data1[d] = optimal_data1_1.clone();
+            optimal_data2[d] = optimal_data2_1.clone();
+            optimal_data1[d-1] = optimal_data1_2.clone();
+            optimal_data2[d-1] = optimal_data2_2.clone();
+        
+            // 部屋の再構築
+            let w2_1 = optimal_param[d];
+            let ar = self.recon(optimal_data1_1, optimal_data2_1, w2_1, d);
+            self.solution.arrangements[d] = ar;
+            let w2_2 = optimal_param[d-1];
+            let ar = self.recon(optimal_data1_2, optimal_data2_2, w2_2, d-1);
+            self.solution.arrangements[d-1] = ar;
+        }
+
         let mut optimal_cost = self.solution.cost();
         for d in 0..self.d {
             let mut ar = self.solution.arrangements[d].clone();
             let mut data1 = optimal_data1[d].clone();
             let mut data2 = optimal_data2[d].clone();
-            data1.sort_by_key(|&(h, _, _, _, _)| h);
-            data2.sort_by_key(|&(h, _, _, _, _)| h);
+            // data1.sort_by_key(|&(h, _, _, _, _)| h);
+            // data2.sort_by_key(|&(h, _, _, _, _)| h);
 
             // 部屋をフルに使う
             let mut max_h = 0;
@@ -606,32 +695,6 @@ impl Solver {
             let ar = self.recon(data1, data2, w2, d);
             self.solution.arrangements[d] = ar;
         }
-
-        // 同じ高さの部屋があれば上に詰めていく
-        /*
-        let mut ar = Arrangement::new(self.w, self.n);
-        for d in (1..self.d).rev().step_by(2) {
-            let mut data1_1 = optimal_data1[d].clone();
-            let mut data2_1 = optimal_data2[d].clone();
-            let mut data1_2 = optimal_data1[d-1].clone();
-            let mut data2_2 = optimal_data2[d-1].clone();
-            let (optimal_data1_1, optimal_data1_2) = self.solution.optimize(data1_1, data1_2);
-            let (optimal_data2_1, optimal_data2_2) = self.solution.optimize(data2_1, data2_2);
-        
-            // 部屋の再構築
-            let w2_1 = optimal_param[d];
-            let w2_2 = optimal_param[d-1];
-            let rooms1 = ar.conv_rooms(0, 0, self.w-w2, &data1);
-            let rooms2 = ar.conv_rooms(0, self.w-w2, w2, &data2);
-            for (room, k) in rooms1 {
-                ar.rooms[k] = room;
-            }
-            for (room, k) in rooms2 {
-                ar.rooms[k] = room;
-            }
-            self.solution.arrangements[d] = ar;
-        }
-        */
     }
 
     fn ans(&self) {
