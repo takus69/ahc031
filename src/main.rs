@@ -695,6 +695,9 @@ impl Solver {
             let ar = self.recon(data1, data2, w2, d);
             self.solution.arrangements[d] = ar;
         }
+
+        // ゼロコスト判定
+        self.check_zero();
     }
 
     fn ans(&self) {
@@ -710,6 +713,61 @@ impl Solver {
         let average: f64 = sums.iter().sum::<usize>() as f64 / sums.len() as f64;
         let e = (1.0 - average / (self.w * self.w) as f64).sqrt();
         eprintln!("{{ \"d\": {}, \"n\": {}, \"e\": {}, \"cost\": {} }}", self.d, self.n, e, self.solution.cost());
+    }
+
+    fn check_zero(&mut self) {
+        // ゼロコスト判定
+        let mut max_a: Vec<usize> = vec![0; self.n];
+        for i in 0..self.n {
+            for d in 0..self.d {
+                max_a[i] = max_a[i].max(self.a[d][i]);
+            }
+        }
+        let mut sum_a = 0;
+        for a in &max_a {
+            sum_a += a;
+        }
+        if sum_a <= self.w*self.w {
+            eprintln!("Ok zero: sum a: {}, {:?}", sum_a, max_a);
+            let mut ar = Arrangement::new(self.w, self.n);
+            let a: Vec<(usize, usize)> = max_a.iter().enumerate().map(|(i, &x)| (i, x)).collect();
+            // 一列に配置
+            let data = ar.stack(0, 0, self.w, &a);
+            let mut rooms = ar.conv_rooms(0, 0, self.w, &data);
+            rooms.sort_by_key(|&(_, k)| k);
+            for (room, _) in rooms {
+                ar.rooms.push(room);
+            }
+            let mut min_cost = ar.cost();
+            let mut optimal_ar = ar.clone();
+
+            // 二列に配置。何個か一列目から除外して、二列目に配置
+            for i in 1..(self.n) {
+                for j in 1..5 {
+                    let w2 = sum_a / self.w + j;
+                    if w2 > self.w / 2 { break; }
+                    // 一列目
+                    let data1 = ar.stack(0, 0, self.w-w2, &a[i..].to_vec());
+                    let rooms1 = ar.conv_rooms(0, 0, self.w-w2, &data1);
+                    // 二列目
+                    let data2 = ar.stack(0, self.w-w2, w2, &a[..i].to_vec());
+                    let rooms2 = ar.conv_rooms(0, self.w-w2, w2, &data2);
+                    for (room, k) in rooms1 {
+                        ar.rooms[k] = room;
+                    }
+                    for (room, k) in rooms2 {
+                        ar.rooms[k] = room;
+                    }
+                    if ar.cost() < min_cost {
+                        min_cost = ar.cost();
+                        optimal_ar = ar.clone();
+                    }
+                }
+            }
+            for d in 0..self.d {
+                self.solution.arrangements[d] = optimal_ar.clone();
+            }
+        }
     }
 }
 
