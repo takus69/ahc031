@@ -35,10 +35,10 @@ fn compute_score_details(
     let mut score = 0;
     let max_score: i64 = 1_000_000_000_000;
     let mut hs: Vec<(usize, usize, usize)> = Vec::new();
-    // let mut vs: Vec<(usize, usize, usize)> = Vec::new();
+    let mut vs: Vec<(usize, usize, usize)> = Vec::new();
     for (d, _) in out.iter().enumerate() {
         for p in 0..input.n {
-            if out[d][p].2 > input.w || out[d][p].3 > input.w {
+            if out[d][p].0 == input.w || out[d][p].1 == input.w || out[d][p].2 > input.w || out[d][p].3 > input.w {
                 return (max_score, format!("Over {}'s w on day {}.", p, d));
             }
             for q in 0..p {
@@ -73,18 +73,17 @@ fn compute_score_details(
         // 横の撤去
         for a in &hs {
             if a.0 == 0 || a.0 == input.w { continue; }
-            score += a.2 as i64 - a.1 as i64;
+            score += (a.2 as i64 - a.1 as i64) / 2;
         }
         // 縦の撤去
-        /*
         for a in &vs {
             if a.0 == 0 || a.0 == input.w { continue; }
-            score += a.2 as i64 - a.1 as i64;
-        }*/
+            // score += a.2 as i64 - a.1 as i64;
+        }
         // 横の設置
         for a in &hs2 {
             if a.0 == 0 || a.0 == input.w { continue; }
-            score += a.2 as i64 - a.1 as i64;
+            score += (a.2 as i64 - a.1 as i64) / 2;
         }
         // 縦の設置
         /*
@@ -93,7 +92,7 @@ fn compute_score_details(
             score += a.2 as i64 - a.1 as i64;
         }*/
         hs = hs2;
-        // vs = vs2;
+        vs = vs2;
     }
     (score + 1, String::new())
 }
@@ -116,9 +115,11 @@ fn decide_partition(a: &[usize], n: usize, w: usize, k: usize, vs: &[usize]) -> 
         v1 = v2;
     }
 
+    let mut cnt = 0;
     for ai in a.iter().rev() {
+        cnt += 1;
         let mut target_i = 0;
-        let mut min_free = w * w;
+        let mut min_free= w*w;
         let mut v1 = vs[0];
         for i in 0..k {
             let v2 = vs[i+1];
@@ -127,11 +128,9 @@ fn decide_partition(a: &[usize], n: usize, w: usize, k: usize, vs: &[usize]) -> 
             let bi = (v2 - v1) * h;
             let f = free[i];
             // eprintln!("min free: {}, f: {}, bi: {}", min_free, f, bi);
-            if f >= bi {
-                if min_free > f - bi {
-                    min_free = f - bi;
-                    target_i = i;
-                }
+            if f > bi  {
+                min_free = f - bi;
+                target_i = i;
             } else { continue; }
             v1 = v2;
         }
@@ -142,7 +141,11 @@ fn decide_partition(a: &[usize], n: usize, w: usize, k: usize, vs: &[usize]) -> 
         free[target_i] = min_free;
         let h1 = hs[target_i];
         let mut h2 = h1 + h;
-        if h2 > w { h2 = h1 + 1; }
+        // if h2 > w - (n - cnt) { h2 = h1 + 1; }
+        if h2 > w {
+            h2 = w;
+            free[target_i] = 0;
+        }
         hs[target_i] = h2;
         rect.push((h1, v1, h2, v2));
     }
@@ -151,10 +154,12 @@ fn decide_partition(a: &[usize], n: usize, w: usize, k: usize, vs: &[usize]) -> 
 }
 
 fn rnd_split(input: &Input, rng: &mut dyn RngCore) -> (usize, Vec<usize>) {
-    let k = rng.gen_range(2i32..input.n as i32) as usize;
+    let k = rng.gen_range(0i32..input.n as i32) as usize;
+    // let k = 3;
     let mut vs = HashSet::new();
     for _ in 0..k {
         let v = rng.gen_range(1i32..=input.w as i32) as usize;
+        // let v = 300;
         vs.insert(v);
     }
     vs.insert(0);
@@ -192,13 +197,17 @@ fn main() {
             break;
         }
         let (k, vs) = rnd_split(&input, &mut rng);
+        // if k == 1 { eprintln!("k: {}", k); }
         for d in 0..input.d {
             output.rect[d] = decide_partition(&input.a[d], input.n, input.w, k, &vs);
         }
-        let (cost, _) = compute_score(&input, &output);
+        let (cost, s) = compute_score(&input, &output);
+        // if s != "" { eprintln!("{}", s);}
+        // eprintln!("cost: {}, k: {}, vs: {:?}", cost, k, vs);
         if best_cost > cost {
             best_cost = cost;
             best_output = output.clone();
+            // eprintln!("best_cost: {}, k: {}, vs: {:?}, s: {}", best_cost, k, vs, s);
         }
     }
     ans(&best_output);
